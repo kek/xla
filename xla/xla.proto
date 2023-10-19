@@ -379,6 +379,12 @@ message DebugOptions {
   bool xla_gpu_enable_async_reduce_scatter = 200;
   bool xla_gpu_enable_async_all_to_all = 201;
 
+  bool xla_gpu_enable_prescheduling_combiners = 258;
+  bool xla_gpu_enable_postscheduling_combiners = 259;
+  string xla_gpu_postscheduling_all_reduce_strategy = 260;
+  string xla_gpu_postscheduling_all_gather_strategy = 261;
+  string xla_gpu_postscheduling_reduce_scatter_strategy = 262;
+
   // Size threshold (in bytes) for the GPU collective combiners.
   int64 xla_gpu_all_reduce_combine_threshold_bytes = 157;
   int64 xla_gpu_all_gather_combine_threshold_bytes = 212;
@@ -646,7 +652,7 @@ message DebugOptions {
 
   int32 xla_gpu_llvm_verification_level = 256;
 
-  // Next id: 258
+  // Next id: 263
 
   // Extra options to pass to the compilation backend (e.g. LLVM); specific
   // interpretation of these values is left to the backend.

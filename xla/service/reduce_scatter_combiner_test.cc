@@ -15,8 +15,10 @@ limitations under the License.
 
 #include "xla/service/reduce_scatter_combiner.h"
 
+#include <string>
 #include <utility>
 
+#include "absl/strings/string_view.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/hlo/utils/hlo_matchers.h"
@@ -27,6 +29,19 @@ namespace {
 
 constexpr int64_t kMaxCombineCount = 256;
 constexpr int64_t kMaxByteCount = 10 * 1024 * 1024;
+
+int64_t ReduceScatterCount(const HloModule& module) {
+  int64_t count = 0;
+  for (HloInstruction* hlo : module.entry_computation()->instructions()) {
+    if (hlo->opcode() == HloOpcode::kReduceScatter ||
+        (hlo->opcode() == HloOpcode::kAsyncStart &&
+         hlo->async_wrapped_instruction()->opcode() ==
+             HloOpcode::kReduceScatter)) {
+      ++count;
+    }
+  }
+  return count;
+}
 
 class ReduceScatterCombinerTest : public HloTestBase {
  public:
@@ -43,11 +58,6 @@ class ReduceScatterCombinerTest : public HloTestBase {
     }
     EXPECT_EQ(changed.value(), expect_change);
     return StatusOr<std::unique_ptr<HloModule>>(std::move(module));
-  }
-
-  size_t ReduceScatterCount(std::unique_ptr<HloModule>& module) {
-    return absl::c_count_if(module->entry_computation()->instructions(),
-                            HloPredicateIsOp<HloOpcode::kReduceScatter>);
   }
 };
 
@@ -73,7 +83,7 @@ ENTRY main {
 )";
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           RunPass(hlo_string, /*expect_change=*/true));
-  EXPECT_EQ(ReduceScatterCount(module), 1);
+  EXPECT_EQ(ReduceScatterCount(*module), 1);
 }
 
 TEST_F(ReduceScatterCombinerTest, SimpleMultipleGroups) {
@@ -103,7 +113,7 @@ ENTRY main {
 )";
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           RunPass(hlo_string, /*expect_change=*/true));
-  EXPECT_EQ(ReduceScatterCount(module), 2);
+  EXPECT_EQ(ReduceScatterCount(*module), 2);
 }
 
 TEST_F(ReduceScatterCombinerTest, DifferentDimensions) {
@@ -134,7 +144,7 @@ ENTRY main {
   TF_ASSERT_OK_AND_ASSIGN(
       auto module, RunPass(hlo_string, /*expect_change=*/true, kMaxByteCount,
                            kMaxCombineCount, /*combine_by_dim=*/false));
-  EXPECT_EQ(ReduceScatterCount(module), 1);
+  EXPECT_EQ(ReduceScatterCount(*module), 1);
 }
 
 // Test that dependent reduce-scatter do not get combined.
@@ -219,6 +229,46 @@ ENTRY entry{
 )";
   TF_ASSERT_OK_AND_ASSIGN(auto module,
                           RunPass(hlo_string, /*expect_change=*/false));
+}
+
+using AsyncReduceScatterCombinerTest = HloTestBase;
+
+TEST_F(AsyncReduceScatterCombinerTest, Simple) {
+  const absl::string_view hlo_string = R"(
+HloModule m, is_scheduled=true
+
+sum {
+  a = f32[] parameter(0)
+  b = f32[] parameter(1)
+  ROOT add.2 = f32[] add(a, b)
+}
+
+ENTRY main {
+  p0 = f32[8] parameter(0)
+  p1 = f32[8] parameter(1)
+  p2 = f32[8] parameter(2)
+  p3 = f32[8] parameter(3)
+  rs0 = ((f32[8]), f32[4])  reduce-scatter-start(p0), replica_groups={{0,1}}, dimensions={0}, to_apply=sum
+  rs0d = f32[4] reduce-scatter-done(rs0), replica_groups={{0,1}}, dimensions={0}, to_apply=sum
+  rs1 = ((f32[8]), f32[4])  reduce-scatter-start(p1), replica_groups={{0,1}}, dimensions={0}, to_apply=sum
+  rs1d = f32[4] reduce-scatter-done(rs1), replica_groups={{0,1}}, dimensions={0}, to_apply=sum
+  foo = f32[4] add(rs0d, rs1d)
+  rs2 = ((f32[8]), f32[4])  reduce-scatter-start(p2), replica_groups={{0,1}}, dimensions={0}, to_apply=sum
+  rs2d = f32[4] reduce-scatter-done(rs2), replica_groups={{0,1}}, dimensions={0}, to_apply=sum
+  rs3 = ((f32[8]), f32[4])  reduce-scatter-start(p3), replica_groups={{0,1}}, dimensions={0}, to_apply=sum
+  rs3d = f32[4] reduce-scatter-done(rs3), replica_groups={{0,1}}, dimensions={0}, to_apply=sum
+  ROOT t = (f32[4], f32[4], f32[4], f32[4]) tuple(rs0d, rs1d, rs2d, rs3d)
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  VLOG(2) << "before: " << module->ToString();
+  AsyncReduceScatterCombiner combine;
+  ASSERT_EQ(ReduceScatterCount(*module), 4);
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, combine.Run(module.get()));
+  VLOG(1) << "after: " << module->ToString();
+  EXPECT_TRUE(changed);
+  EXPECT_EQ(ReduceScatterCount(*module), 2);
 }
 
 }  // namespace
