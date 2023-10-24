@@ -1,0 +1,235 @@
+==== triton/python/test/unit/language/BUILD#None - /google/src/cloud/aliia/triton_pytest/triton/python/test/unit/language/BUILD ====
+# action=add type=text
+--- /dev/null	1969-12-31 16:00:00.000000000 -0800
++++ triton/python/test/unit/language/BUILD	2023-11-13 04:49:36.000000000 -0800
+@@ -0,0 +1,36 @@
++load("//third_party/py/pytest:pytest_defs.bzl", "pytest_multi_tests")
++
++pytest_multi_tests(
++    name = "tests2",
++    srcs = [
++        "conftest.py",
++        "test_annotations.py",
++        "test_block_pointer.py",
++    ],
++    data = [
++        "//third_party/gpus/cuda_12_0:cuda_root",
++        "//third_party/grte/v5_x86/release/usr/grte/v5:link",
++    ],
++    python_version = "PY3",
++    srcs_version = "PY3",
++    tags = [
++        "config-cuda-only",
++        "requires-gpu-sm80",
++    ],
++    tests = glob(
++        [
++            "test_*.py",
++        ],
++        exclude = [
++            "test_line_info.py",  # broken
++            "test_subprocess.py",  # broken by configuration
++        ],
++    ),
++    visibility = [
++        "//third_party/gpus/cuda:visibility",
++    ],
++    deps = [
++        "//third_party/py/torch:pytorch",
++        "//third_party/py/triton",
++    ],
++)
+==== triton/python/test/unit/language/test_core.py#22 - /google/src/cloud/aliia/triton_pytest/triton/python/test/unit/language/test_core.py ====
+# action=edit type=text
+--- triton/python/test/unit/language/test_core.py	2023-11-03 09:52:38.000000000 -0700
++++ triton/python/test/unit/language/test_core.py	2023-11-13 05:22:52.000000000 -0800
+@@ -1573,7 +1573,7 @@
+ # test reduce
+ # ---------------
+ 
+-
++'''
+ def get_reduced_dtype(dtype_str, op):
+     if op in ('argmin', 'argmax'):
+         return 'int32'
+@@ -2228,7 +2228,7 @@
+     expect_var, expect_mean = torch.var_mean(x, dim=0, correction=0)
+     torch.testing.assert_close(out_mean, expect_mean)
+     torch.testing.assert_close(out_var, expect_var)
+-
++'''
+ 
+ # ---------------
+ # test permute
+@@ -2298,7 +2298,7 @@
+ # ---------------
+ # test dot
+ # ---------------
+-
++'''
+ 
+ @pytest.mark.parametrize("M, N, K, num_warps, col_a, col_b, epilogue, allow_tf32, in_dtype, out_dtype",
+                          [(*shape, 4, False, False, epilogue, allow_tf32, in_dtype, out_dtype)
+@@ -2679,6 +2679,7 @@
+     out = torch.zeros((32, 32), dtype=getattr(torch, dtype_str), device=device)
+     kernel[(1,)](out, ALLOW_TF32=allow_tf32)
+     assert torch.all(out == out_ref)
++'''
+ 
+ # ---------------
+ # test arange
+@@ -2972,7 +2973,9 @@
+     kernel[(1, )](x)
+ 
+ 
+-@pytest.mark.parametrize("device", ['cuda', 'cpu', 'cpu_pinned'])
++@pytest.mark.parametrize("device", ['cuda',
++                                    #'cpu',
++                                    'cpu_pinned'])
+ def test_pointer_arguments(device):
+     @triton.jit
+     def kernel(x):
+@@ -3222,7 +3225,7 @@
+ # test extern
+ # -------------
+ 
+-
++'''
+ @pytest.mark.parametrize("dtype_str, expr, lib_path",
+                          [('int32', 'math.ffs', ''),
+                           ('float32', 'math.log2', ''),
+@@ -3285,7 +3288,6 @@
+     else:
+         np.testing.assert_allclose(y_ref, to_numpy(y_tri), rtol=0.01)
+ 
+-
+ @pytest.mark.parametrize("dtype_str, expr, lib_path",
+                          [('float32', 'math.pow', ''),
+                           ('float64', 'math.pow_dtype', ''),
+@@ -3322,6 +3324,7 @@
+     # compare
+     np.testing.assert_allclose(y_ref, to_numpy(y_tri), rtol=0.01)
+ 
++'''
+ 
+ # -----------------------
+ # test inline asm
+@@ -3744,7 +3747,7 @@
+     SharedLayout(2, 2, 4, [1, 0], [1, 1], [1, 1], [0, 1]),
+ ]
+ 
+-
++'''
+ @pytest.mark.parametrize("M, N", [[64, 1], [64, 64], [128, 128], [1, 64]])
+ @pytest.mark.parametrize("dtype", ['float16'])
+ @pytest.mark.parametrize("src_layout", layouts)
+@@ -3819,7 +3822,7 @@
+ 
+     assert torch.equal(z, x)
+ 
+-
++'''
+ def test_load_scalar_with_mask(device):
+     @triton.jit
+     def kernel(Input, Index, Out, N: int):
+@@ -3923,7 +3926,7 @@
+     c_ptrs = c_ptr + stride_cm * offs_cm[:, None] + stride_cn * offs_cn[None, :]
+     tl.store(c_ptrs, accumulator)
+ 
+-
++'''
+ @pytest.mark.parametrize("in_type_str", ['float8e5', 'float8e4nv'])
+ @pytest.mark.parametrize("low_precision_acc", [0, 32, 64, 128])
+ def test_fp8_dot_acc(in_type_str, low_precision_acc, device):
+@@ -3953,6 +3956,7 @@
+         torch.testing.assert_close(ref_out, C, rtol=1e-3, atol=1e-3)
+     else:
+         torch.testing.assert_close(ref_out, C)
++'''
+ 
+ # -----------------------
+ # test enable_fp_fusion
+==== triton/python/triton/common/build.py#6 - /google/src/cloud/aliia/triton_pytest/triton/python/triton/common/build.py ====
+# action=edit type=text
+--- triton/python/triton/common/build.py	2023-10-12 00:35:02.000000000 -0700
++++ triton/python/triton/common/build.py	2023-11-13 05:23:15.000000000 -0800
+@@ -6,6 +6,7 @@
+ import subprocess
+ import sys
+ import sysconfig
++from triton.google import cuda_path
+ 
+ # import setuptools
+ 
+@@ -58,6 +59,13 @@
+ 
+ 
+ def _build(name, src, srcdir):
++    base = os.getenv('OLDPWD')
++    src_dir = os.getenv('TEST_SRCDIR')
++    cuda_include_dir_google = f"{cuda_path.get_cuda_absolute_path()}/include/"
++    grte_lib_google = f"{src_dir}/grte/v5_x86/release/usr/grte/v5/lib64/"
++    py_include_dir_google = f"{base}/third_party/python_runtime/v3_10/Include/"
++    py_config_google = f"{base}/third_party/python_runtime/v3_10/google/k8-linux/"
++    triton_include_google = f"{base}/third_party/triton/include/"
+     if is_hip():
+         hip_lib_dir = os.path.join(rocm_path_dir(), "lib")
+         hip_include_dir = os.path.join(rocm_path_dir(), "include")
+@@ -89,8 +97,7 @@
+     if is_hip():
+         ret = subprocess.check_call([cc, src, f"-I{hip_include_dir}", f"-I{py_include_dir}", f"-I{srcdir}", "-shared", "-fPIC", f"-L{hip_lib_dir}", "-lamdhip64", "-o", so])
+     else:
+-        cc_cmd = [cc, src, "-O3", f"-I{cu_include_dir}", f"-I{py_include_dir}", f"-I{srcdir}", "-shared", "-fPIC", "-lcuda", "-o", so]
+-        cc_cmd += [f"-L{dir}" for dir in cuda_lib_dirs]
++        cc_cmd = [cc, src, "-O3", f"-I{cuda_include_dir_google}", f"-I{py_include_dir_google}", f"-I{py_config_google}", f"-I{srcdir}", f"-I{triton_include_google}", f"-L{grte_lib_google}", "-shared", "-fPIC", "-lcuda", "-o", so]
+         ret = subprocess.check_call(cc_cmd)
+ 
+     if ret == 0:
+==== triton/python/triton/compiler/compiler.py#12 - /google/src/cloud/aliia/triton_pytest/triton/python/triton/compiler/compiler.py ====
+# action=edit type=text
+--- triton/python/triton/compiler/compiler.py	2023-10-24 11:45:22.000000000 -0700
++++ triton/python/triton/compiler/compiler.py	2023-11-06 07:02:35.000000000 -0800
+@@ -398,7 +398,7 @@
+     tma_infos = TMAInfos()
+     # build architecture descriptor
+     if device_type == "cuda":
+-        _device_backend = get_backend(device_type)
++        _device_backend = None
+         target = CudaTargetDescriptor(capability=get_cuda_capability(capability), num_warps=num_warps, enable_fp_fusion=enable_fp_fusion)
+     else:
+         _device_backend = get_backend(device_type)
+@@ -537,7 +537,7 @@
+ 
+         if ir_name == "cubin":
+             asm[ir_name] = next_module
+-            asm["sass"] = lambda: get_sass(next_module)
++            asm["sass"] = None
+         elif ir_name == "amdgcn":
+             asm[ir_name] = str(next_module[0])
+         else:
+==== triton/python/triton/compiler/make_launcher.py#5 - /google/src/cloud/aliia/triton_pytest/triton/python/triton/compiler/make_launcher.py ====
+# action=edit type=text
+--- triton/python/triton/compiler/make_launcher.py	2023-10-24 11:45:22.000000000 -0700
++++ triton/python/triton/compiler/make_launcher.py	2023-11-06 07:01:54.000000000 -0800
+@@ -30,6 +30,8 @@
+     cache_path = so_cache_manager.get_file(so_name)
+     if cache_path is None:
+         with tempfile.TemporaryDirectory() as tmpdir:
++            if os.environ.get('TEST_TMPDIR') is not None:
++              tmpdir = os.environ.get('TEST_TMPDIR', '')
+             src = generate_launcher(constants, signature, ids)
+             src_path = os.path.join(tmpdir, "main.c")
+             with open(src_path, "w") as f:
+==== triton/python/triton/runtime/driver.py#3 - /google/src/cloud/aliia/triton_pytest/triton/python/triton/runtime/driver.py ====
+# action=edit type=text
+--- triton/python/triton/runtime/driver.py	2023-10-12 00:35:02.000000000 -0700
++++ triton/python/triton/runtime/driver.py	2023-10-24 05:16:46.000000000 -0700
+@@ -173,7 +173,7 @@
+ def initialize_driver():
+     # TODO(b/279292524): Handle this to properly port in Cuda dependency
+     # without needing to compile the C++ sources at runtime.
+-    return UnsupportedDriver()
++    return CudaDriver()
+     import torch
+     if torch.version.hip is not None:
+         return HIPDriver()
