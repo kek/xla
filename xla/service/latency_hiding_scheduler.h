@@ -499,6 +499,14 @@ class HloScheduleGraph {
   // List containing the original order (before scheduling) of the
   // instructions).
   std::vector<const HloInstruction*> original_order_;
+  // Recursively searches through node's predecessors to see if
+  // possible_predecessor can be found.
+  bool IsPredecessorTransitively(const HloGraphNode* node,
+                                 const HloGraphNode* possible_predecessor);
+  // Internal method for predecessor search.
+  bool IsPredecessorTransitively(
+      const HloGraphNode* curr, const HloGraphNode* possible_predecessor,
+      absl::flat_hash_set<const HloGraphNode*>& visited);
 };
 
 // Tracks data about HloBuffers like where the first definition is in the

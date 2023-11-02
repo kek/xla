@@ -1385,6 +1385,27 @@ std::string HloEdge::ToString() const {
                       " latency: ", Latency(), "\n");
 }
 
+bool HloScheduleGraph::IsPredecessorTransitively(
+    const HloGraphNode* curr, const HloGraphNode* possible_predecessor,
+    absl::flat_hash_set<const HloGraphNode*>& visited) {
+  if (possible_predecessor == curr) return true;
+  if (visited.contains(curr)) return false;
+  visited.insert(curr);
+  for (const auto& edge : curr->GetPredecessors()) {
+    auto user_node_it = nodes_.find(&edge.Target().GetInstr());
+    if (IsPredecessorTransitively(user_node_it->second.get(),
+                                  possible_predecessor, visited)) {
+      return true;
+    }
+  }
+  return false;
+}
+bool HloScheduleGraph::IsPredecessorTransitively(
+    const HloGraphNode* node, const HloGraphNode* possible_predecessor) {
+  absl::flat_hash_set<const HloGraphNode*> visited = {possible_predecessor};
+  return IsPredecessorTransitively(node, possible_predecessor, visited);
+}
+
 HloScheduleGraph::HloScheduleGraph(
     const std::vector<HloInstruction*>* post_order_instructions,
     HloAliasAnalysis* alias_analysis, const LatencyEstimator* latency_estimator,
@@ -1413,14 +1434,8 @@ HloScheduleGraph::HloScheduleGraph(
         async_tracker->GetOccupiedShareableResourcesFromVector(
             new_node_it->second->GetResources());
   }
-  // Cache used to detect if we already added a dependency between two nodes
-  // to avoid duplicates in the predecessors/successors lists.
-  absl::flat_hash_map<const HloInstruction*,
-                      absl::flat_hash_set<const HloInstruction*>>
-      dependencies_set;
-  auto add_dependency_helper = [&dependencies_set, latency_estimator,
-                                async_tracker](HloGraphNode* from,
-                                               HloGraphNode* to) {
+  auto add_dependency_helper = [latency_estimator](HloGraphNode* from,
+                                                   HloGraphNode* to) {
     // Get the latency between these two instructions for this edge.
     const LatencyEstimator::TimeCost latency =
         latency_estimator->GetLatencyBetween(*from, *to);
@@ -1430,9 +1445,6 @@ HloScheduleGraph::HloScheduleGraph(
     to->predecessors_.push_back(HloEdge(latency, from));
     ++to->indegree_;
     ++from->outdegree_;
-    if (async_tracker->IsSupportedAsyncStart(to->GetInstr())) {
-      dependencies_set[&to->GetInstr()].insert(&from->GetInstr());
-    }
   };
   // Add dependencies edges between each of the graph nodes.
   for (const HloInstruction* instr : *post_order_instructions) {
@@ -1473,11 +1485,8 @@ HloScheduleGraph::HloScheduleGraph(
                 // The instruction itself and later ones might be
                 // identified as use.instruction. Add checks here to avoid
                 // adding dependencies for these instructions.
-                // Also don't add the dependency if it has been already added.
-                auto dep_it = dependencies_set.find(async_start);
                 if (use.instruction == async_start ||
-                    reachability->IsReachable(instr, use.instruction) ||
-                    dep_it->second.contains(use.instruction)) {
+                    reachability->IsReachable(instr, use.instruction)) {
                   continue;
                 }
                 auto it = nodes_.find(use.instruction);
@@ -1486,6 +1495,11 @@ HloScheduleGraph::HloScheduleGraph(
                 it = nodes_.find(async_start);
                 CHECK(it != nodes_.end());
                 HloGraphNode* start_node = it->second.get();
+                // If there is already a transitive link between the nodes the
+                // other way then skip adding this one.
+                if (IsPredecessorTransitively(pred_node, start_node)) {
+                  continue;
+                }
                 pred_node->successors_.push_back(HloEdge(1, start_node));
                 start_node->predecessors_.push_back(HloEdge(1, pred_node));
                 ++pred_node->outdegree_;
