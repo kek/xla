@@ -29,6 +29,11 @@ function is_linux_gpu_job() {
 
 clone_main_jax() {
   git clone https://github.com/google/jax.git
+  # DO NOT SUBMIT THIS:
+  pushd jax
+  git fetch origin pull/18456/head:pr
+  git switch pr
+  popd
 }
 
 prelude() {
@@ -37,6 +42,40 @@ prelude() {
   if is_linux_gpu_job ; then
     export JAX_CUDA_VERSION=12
     export JAX_CUDNN_VERSION=8.9
+    # TODO(hebecker): Remove this once Kokoro images are updated
+    sudo apt-get update
+    sudo apt-get install -y \
+      cuda-command-line-tools-12-3 \
+      cuda-cudart-dev-12-3         \
+      cuda-nvcc-12-3               \
+      cuda-cupti-12-3              \
+      cuda-nvprune-12-3            \
+      cuda-libraries-12-3          \
+      cuda-libraries-dev-12-3      \
+      cuda-nvml-dev-12-3           \
+      libcufft-12-3                \
+      libcurand-12-3               \
+      libcusolver-dev-12-3         \
+      libcusparse-dev-12-3         \
+      libcublas-12-3               \
+      libcublas-dev-12-3           \
+      cuda-drivers-545             \
+      libnvidia-common-545 \
+      libnvidia-compute-545 \
+      libnvidia-decode-545 \
+      libnvidia-encode-545 \
+      libnvidia-fbc1-545 \
+      libnvidia-gl-545 \
+      nvidia-compute-utils-545 \
+      nvidia-dkms-545 \
+      nvidia-driver-545 \
+      nvidia-kernel-common-545 \
+      nvidia-kernel-source-545 \
+      nvidia-utils-545 \
+      xserver-xorg-video-nvidia-545
+    sudo systemctl stop gdm
+    sudo rmmod nvidia_uvm nvidia_drm nvidia_modeset nvidia
+    sudo nvidia-smi
     nvidia-smi
     setup_env_vars_py39
   else
@@ -84,7 +123,7 @@ build_and_test_on_rbe_gpu() {
     --override_repository=xla="${KOKORO_ARTIFACTS_DIR}"/github/xla \
     --config=avx_posix \
     --config=mkl_open_source_only \
-    --config="rbe_linux_cuda12.2_nvcc_py3.9" \
+    --config="rbe_linux_cuda12.3_nvcc_py3.9" \
     --test_env=XLA_PYTHON_CLIENT_ALLOCATOR=platform \
     --test_output=errors \
     --test_env=JAX_SKIP_SLOW_TESTS=1 \

@@ -254,6 +254,7 @@ def InvokeNvcc(argv, log=False):
   # Force C++17 dialect (note, everything in just one string!)
   nvccopts += ' --std c++17 '
   nvccopts += fatbin_options
+  nvccopts += ' --expt-relaxed-constexpr'
   # The option `-allow-unsupported-compiler` is required for the combination of
   # NVCC+clang compilers. 
   # The following message appears if this option is not provided:
