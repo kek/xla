@@ -41,6 +41,17 @@ class MultiDeviceAdapter;
 }
 
 namespace xla {
+class StreamExecutorGpuDeviceDescription
+    : public PjRtStreamExecutorDeviceDescription {
+ public:
+  explicit StreamExecutorGpuDeviceDescription(std::string device_kind,
+                                              const GpuTopology& gpu_topology);
+  int core_on_chip() const { return id(); }
+  absl::Span<int const> coords() const { return coords_; }
+
+ private:
+  std::array<int, 3> coords_;
+};
 
 class StreamExecutorGpuTopologyDescription : public PjRtTopologyDescription {
  public:

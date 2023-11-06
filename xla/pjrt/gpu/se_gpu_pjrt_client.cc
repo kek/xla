@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "xla/pjrt/gpu/se_gpu_pjrt_client.h"
 
+#include <array>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -43,6 +44,7 @@ limitations under the License.
 #include "xla/pjrt/distributed/topology_util.h"
 #include "xla/pjrt/pjrt_client.h"
 #include "xla/pjrt/pjrt_compiler.h"
+#include "xla/pjrt/pjrt_device_description.h"
 #include "xla/pjrt/pjrt_executable.h"
 #include "xla/pjrt/pjrt_stream_executor_client.h"
 #include "xla/pjrt/stream_executor_executable.h"
@@ -1068,6 +1070,30 @@ absl::StatusOr<std::string> StreamExecutorGpuTopologyDescription::Serialize()
     return absl::InternalError("Failed to serialize gpu_topology");
   }
   return result;
+}
+
+StreamExecutorGpuDeviceDescription::StreamExecutorGpuDeviceDescription(
+    std::string device_kind, const GpuTopology& gpu_topology)
+    : PjRtStreamExecutorDeviceDescription(/*id=*/0, device_kind,
+                                          /*process_index=*/0) {
+  int64_t core_index = 0;
+  // On single-host network is all-to-all, by default put device on z axis.
+  coords_ = std::array<int, 3>{1, 1, gpu_topology.number_of_devices()};
+  std::vector<int64_t> v_coords(coords_.begin(), coords_.end());
+
+  absl::flat_hash_map<std::string, PjRtDeviceAttribute> attributes = {
+      {"coords", xla::PjRtDeviceAttribute(v_coords)},
+      {"core_on_chip", xla::PjRtDeviceAttribute(core_index)},
+  };
+  PjRtStreamExecutorDeviceDescription::SetAttributes(attributes);
+  std::string debug_string =
+      absl::StrFormat("%s_%i(process=%i,(%i,%i,%i))", device_kind, id(),
+                      process_index(), v_coords[0], v_coords[1], v_coords[2]);
+  PjRtStreamExecutorDeviceDescription::SetDebugString(debug_string);
+  std::string to_string = absl::StrFormat(
+      "%s(id=%i, process_index=%i, coords=(%s), core_on_chip=%i)", device_kind,
+      id(), process_index(), absl::StrJoin(coords_, ","), core_on_chip());
+  PjRtStreamExecutorDeviceDescription::SetToString(to_string);
 }
 
 }  // namespace xla

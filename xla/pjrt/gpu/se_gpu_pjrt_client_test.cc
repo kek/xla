@@ -606,5 +606,18 @@ TEST(StreamExecutorGpuClientTest, GetAllocatorStatsTest) {
   }
 }
 
+TEST(StreamExecutorGpuDeviceDescription, CreateDeviceDescription) {
+  GpuTopology gpu_topology({3, 2, 1});
+  std::string device_kind = "gpu";
+  auto device_description =
+      StreamExecutorGpuDeviceDescription(device_kind, gpu_topology);
+
+  std::array<int, 3> coords = {1, 1, 3};
+  EXPECT_EQ(device_description.coords(), coords);
+  EXPECT_EQ(device_description.core_on_chip(), 0);
+  EXPECT_EQ(device_description.id(), 0);
+  EXPECT_EQ(device_description.device_kind(), "gpu");
+}
+
 }  // namespace
 }  // namespace xla
