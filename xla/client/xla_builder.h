@@ -901,6 +901,11 @@ class XlaBuilder {
                                        const XlaComputation& comparator,
                                        int64_t dimension, bool is_stable);
 
+  XlaOp TopK(XlaOp operand, int64_t k, const XlaComputation& comparator);
+  virtual StatusOr<XlaOp> TopKInternal(const Shape& shape, XlaOp operand,
+                                       int64_t k,
+                                       const XlaComputation& comparator);
+
   XlaOp Clamp(XlaOp min, XlaOp operand, XlaOp max);
 
   XlaOp Map(absl::Span<const XlaOp> operands, const XlaComputation& computation,
@@ -1532,6 +1537,7 @@ class XlaBuilder {
   friend XlaOp Sort(absl::Span<const XlaOp> operands,
                     const XlaComputation& comparator, int64_t dimension,
                     bool is_stable);
+  friend XlaOp TopK(XlaOp operand, int64_t k, const XlaComputation& comparator);
   friend XlaOp Clamp(XlaOp min, XlaOp operand, XlaOp max);
   friend XlaOp Map(XlaBuilder* builder, absl::Span<const XlaOp> operands,
                    const XlaComputation& computation,
@@ -2671,8 +2677,34 @@ XlaOp Rev(XlaOp operand, absl::Span<const int64_t> dimensions);
 //   where parameter 2 * i and 2 * i + 1 correspond to the value of operand i at
 //   two index positions.
 // Default comparator computations can be found in lib/comparators.h
-XlaOp Sort(absl::Span<const XlaOp> operands, const XlaComputation& comparator,
+XlaOp Sort(const XlaOp operand, const XlaComputation& comparator,
            int64_t dimension = -1, bool is_stable = false);
+
+// Enqueues a topk instruction onto the computation. TopK returns the highest
+// 'k' values and their indices along the last dimension of the 'operand', using
+// 'comparator' for comparisons. 'comparator' needs to define a strict weak
+// order.
+//
+// * If the operand is a rank-1 tensor (an array), the result is a tuple that
+//   consists of:
+//   * a sorted array with the top 'k' elements. The resulting sorting order
+//     has the property that for all index positions i, j with i < j, either
+//     comparator(value[i], value[j]) = comparator(value[j], value[i]) = false
+//     or comparator(value[i], value[j]) = true.
+//   * an array containing the indices of the k elements.
+//   For example, if the input is [0.1, 0.3, 0.2] and k == 2, the output tuple
+//   is ([0.3, 0.2], [1, 2]).
+// * If the operand has higher rank, the result is a tuple that consists of:
+//   * a tensor equivalent to one produced by sorting the operand along the last
+//     dimension and slicing that dimension to only the top 'k' values. The last
+//     dimension is sorted as in the rank-1 case.
+//   * a tensor containing the indices of the top 'k' values along the last
+//     dimension.
+//   For example, if the input is [0.1, 0.3, 0.2][0.5, 0.4, 0.6] and k == 1, the
+//   output tuple is ([0.3][0.6], [1][2]).
+//
+// Default comparator computations can be found in lib/comparators.h
+XlaOp TopK(XlaOp operand, int64_t k, const XlaComputation& comparator);
 
 // Enqueues a clamp instruction onto the computation.
 XlaOp Clamp(XlaOp min, XlaOp operand, XlaOp max);
