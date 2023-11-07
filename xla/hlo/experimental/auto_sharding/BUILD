@@ -37,6 +37,7 @@ cc_library(
         ":matrix",
         ":metrics",
         ":profiling_result",
+        "//third_party/protobuf:protobuf_lite",
         "//xla:array",
         "//xla:shape_tree",
         "//xla:shape_util",
