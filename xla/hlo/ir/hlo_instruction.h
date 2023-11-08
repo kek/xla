@@ -574,8 +574,7 @@ class HloInstruction {
   // Creates a Top-K instruction.
   static std::unique_ptr<HloInstruction> CreateTopK(const Shape& shape,
                                                     HloInstruction* input,
-                                                    int64_t k,
-                                                    HloComputation* compare);
+                                                    int64_t k, bool largest);
 
   // Creates a get tuple element instruction.
   static std::unique_ptr<HloInstruction> CreateGetTupleElement(
