@@ -1459,9 +1459,8 @@ HloInstruction* HloParserImpl::CreateInstruction(  // NOLINT
     case HloOpcode::kTopK: {
       optional<int64_t> k;
       attrs["k"] = {/*required=*/true, AttrTy::kInt64, &k};
-      std::optional<HloComputation*> to_apply;
-      attrs["to_apply"] = {/*required=*/true, AttrTy::kHloComputation,
-                           &to_apply};
+      optional<bool> largest;
+      attrs["largest"] = {/*required=*/false, AttrTy::kBool, &largest};
       if ((!preset_operands && !ParseOperands(&operands, builder,
                                               /*expected_size=*/1)) ||
           !ParseAttributes(attrs, allow_attributes)) {
@@ -1472,8 +1471,8 @@ HloInstruction* HloParserImpl::CreateInstruction(  // NOLINT
           })) {
         return nullptr;
       }
-      return builder->AddInstruction(
-          HloInstruction::CreateTopK(*shape, operands[0], *k, *to_apply));
+      return builder->AddInstruction(HloInstruction::CreateTopK(
+          *shape, operands[0], *k, (largest.has_value() ? *largest : true)));
     }
     // Unary ops.
     case HloOpcode::kAbs:
