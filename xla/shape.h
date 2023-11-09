@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef XLA_SHAPE_H_
 #define XLA_SHAPE_H_
 
+#include <cstdint>
 #include <limits>
 #include <optional>
 #include <ostream>
@@ -24,6 +25,7 @@ limitations under the License.
 #include <vector>
 
 #include "absl/container/inlined_vector.h"
+#include "absl/log/check.h"
 #include "absl/types/span.h"
 #include "xla/layout.h"
 #include "xla/primitive_util.h"
@@ -101,6 +103,17 @@ class Shape {
   // Returns true if the shape has one or more dimensions with unbounded sizes.
   // Tuple shapes are traversed recursively.
   bool is_unbounded_dynamic() const;
+
+  // Returns true if the given dimension is unbounded dynamic.
+  bool is_unbounded_dynamic_dimension(int dimension) const {
+    return dimensions_.at(dimension) == kUnboundedSize;
+  }
+
+  // Sets a given dimension as unbounded dynamic.
+  void set_unbounded_dynamic_dimension(int dimension) {
+    dynamic_dimensions_[dimension] = true;
+    dimensions_.at(dimension) = kUnboundedSize;
+  }
 
   // Returns true if the given dimension is dynamically-sized.
   bool is_dynamic_dimension(int dimension) const {

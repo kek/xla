@@ -814,23 +814,53 @@ ShapeInference::InferDegenerateDimensionBroadcastShape(HloOpcode operation,
   std::vector<bool> output_dimensions_is_dynamic(lhs.rank());
   for (int64_t i = 0; i < lhs.rank(); ++i) {
     if (lhs.dimensions(i) == rhs.dimensions(i)) {
+      // LHS | RHS | Result
+      // <=X | <=X | <=X
+      // <=X | X   | <=X
+      // X   | <=X | <=X
+      // ?   | ?   | ?
       output_dimensions[i] = lhs.dimensions(i);
+      CHECK_EQ(lhs.is_dynamic_dimension(i) == rhs.is_dynamic_dimension(i),
+               true);
+      output_dimensions_is_dynamic[i] = lhs.is_dynamic_dimension(i);
     } else if (lhs.dimensions(i) == 1) {
-      output_dimensions[i] = rhs.dimensions(i);
+      // LHS | RHS | Result
+      // 1   | <=X | <=X
+      // 1   | X   | X
+      // 1   | ?   | 1
+      output_dimensions[i] =
+          rhs.is_unbounded_dynamic_dimension(i) ? 1 : rhs.dimensions(i);
+      output_dimensions_is_dynamic[i] = rhs.is_unbounded_dynamic_dimension(i)
+                                            ? false
+                                            : rhs.is_dynamic_dimension(i);
     } else if (rhs.dimensions(i) == 1) {
-      output_dimensions[i] = lhs.dimensions(i);
+      // LHS | RHS | Result
+      // <=X | 1   | <=X
+      // X   | 1   | X
+      // ?   | 1   | 1
+      output_dimensions[i] =
+          lhs.is_unbounded_dynamic_dimension(i) ? 1 : lhs.dimensions(i);
+      output_dimensions_is_dynamic[i] = lhs.is_unbounded_dynamic_dimension(i)
+                                            ? false
+                                            : lhs.is_dynamic_dimension(i);
+    } else if (lhs.is_unbounded_dynamic_dimension(i) ||
+               rhs.is_unbounded_dynamic_dimension(i)) {
+      // LHS | RHS | Result
+      // ?   | <=X | <=X
+      // ?   | X   | X
+      // <=X | ?   | <=X
+      // X   | ?   | X
+      output_dimensions[i] = lhs.is_unbounded_dynamic_dimension(i)
+                                 ? rhs.dimensions(i)
+                                 : lhs.dimensions(i);
+      output_dimensions_is_dynamic[i] = lhs.is_unbounded_dynamic_dimension(i)
+                                            ? rhs.is_dynamic_dimension(i)
+                                            : lhs.is_dynamic_dimension(i);
     } else {
       return InvalidArgument(
           "Binary op %s with incompatible shapes: %s and %s.",
           HloOpcodeString(operation), ShapeUtil::HumanString(lhs),
           ShapeUtil::HumanString(rhs));
-    }
-  }
-
-  // Merge dynamic dimensions from two shapes.
-  for (int64_t i = 0; i < rhs.rank(); ++i) {
-    if (rhs.is_dynamic_dimension(i) || lhs.is_dynamic_dimension(i)) {
-      output_dimensions_is_dynamic[i] = true;
     }
   }
 
@@ -841,6 +871,14 @@ ShapeInference::InferDegenerateDimensionBroadcastShape(HloOpcode operation,
 /* static */ StatusOr<Shape> ShapeInference::InferInDimBroadcastShape(
     const Shape& smaller_shape, const Shape& larger_shape,
     absl::Span<const int64_t> broadcast_dimensions) {
+  if (smaller_shape.is_unbounded_dynamic() ||
+      larger_shape.is_unbounded_dynamic()) {
+    return InvalidArgument(
+        "Unbounded dynamic shapes not supported, but we have %s and %s",
+        ShapeUtil::HumanString(smaller_shape),
+        ShapeUtil::HumanString(larger_shape));
+  }
+
   if (broadcast_dimensions.empty() && !ShapeUtil::IsScalar(smaller_shape)) {
     // Reject "magic" inference for binops on different shapes, requiring
     // the user to provide an explicit broadcast dimension in this case.
@@ -988,6 +1026,18 @@ ShapeInference::InferDegenerateDimensionBroadcastShape(HloOpcode operation,
     for (int64_t i = 0; i < rhs.rank(); ++i) {
       if (rhs.is_dynamic_dimension(i)) {
         result.set_dynamic_dimension(i, true);
+      }
+      // LHS | RHS | Result
+      // X   | ?   | X
+      // ?   | X   | X
+      // ?   | ?   | ? (no-op)
+      if (lhs.is_unbounded_dynamic_dimension(i) ^
+          rhs.is_unbounded_dynamic_dimension(i)) {
+        auto static_dimension = lhs.is_unbounded_dynamic_dimension(i)
+                                    ? rhs.dimensions(i)
+                                    : lhs.dimensions(i);
+        result.set_dimensions(i, static_dimension);
+        result.set_dynamic_dimension(i, false);
       }
     }
 

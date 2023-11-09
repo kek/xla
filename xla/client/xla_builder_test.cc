@@ -22,6 +22,7 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include "xla/client/sharding_builder.h"
 #include "xla/client/value_inference.h"
@@ -33,6 +34,7 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/service/pattern_matcher.h"
 #include "xla/service/pattern_matcher_gmock.h"
+#include "xla/shape.h"
 #include "xla/shape_util.h"
 #include "xla/test_helpers.h"
 #include "xla/util.h"
@@ -1524,5 +1526,66 @@ TEST_F(XlaBuilderTest, InvalidSharding) {
               HasSubstr("Number of tile assignment dimensions (excluding "
                         "subgroups) is different than the input rank"));
 }
+
+TEST_F(XlaBuilderTest, UnboundedAdd) {
+  XlaBuilder b(TestName());
+
+  // lhs shape = [1, ?, ?]
+  // rhs shape = [?, 2, ?]
+  // broadcast_dimensions = {}
+  // output = [1, 2, ?]
+  auto lhs =
+      Parameter(&b, 0,
+                ShapeUtil::MakeShape(
+                    F32, {1, Shape::kUnboundedSize, Shape::kUnboundedSize},
+                    {false, true, true}),
+                "lhs");
+  auto rhs =
+      Parameter(&b, 1,
+                ShapeUtil::MakeShape(
+                    F32, {Shape::kUnboundedSize, 2, Shape::kUnboundedSize},
+                    {true, false, true}),
+                "rhs");
+  auto add = Add(lhs, rhs, /*broadcast_dimensions=*/{});
+  TF_ASSERT_OK_AND_ASSIGN(auto add_shape, b.GetShape(add));
+  EXPECT_TRUE(ShapeUtil::Equal(
+      add_shape, ShapeUtil::MakeShape(F32, {1, 2, Shape::kUnboundedSize},
+                                      {false, false, true})));
+  TF_ASSERT_OK_AND_ASSIGN(auto module, BuildHloModule(&b));
+}
+
+TEST_F(XlaBuilderTest, UnboundedAddUnsupportedImplicitBroadcast) {
+  XlaBuilder b(TestName());
+
+  auto lhs = Parameter(
+      &b, 0,
+      ShapeUtil::MakeShape(F32, {Shape::kUnboundedSize, 10}, {true, false}),
+      "lhs");
+  auto rhs = Parameter(&b, 1, ShapeUtil::MakeShape(F32, {1}), "rhs");
+  Add(lhs, rhs, /*broadcast_dimensions=*/{1});
+  auto statusor = BuildHloModule(&b);
+  ASSERT_FALSE(statusor.ok());
+  EXPECT_THAT(statusor.status().message(),
+              HasSubstr("Unbounded dynamic shapes not supported"));
+}
+
+TEST_F(XlaBuilderTest, UnboundedAddIncompatibleShapes) {
+  XlaBuilder b(TestName());
+
+  auto lhs = Parameter(
+      &b, 0,
+      ShapeUtil::MakeShape(F32, {Shape::kUnboundedSize, 2}, {true, false}),
+      "lhs");
+  auto rhs = Parameter(
+      &b, 1,
+      ShapeUtil::MakeShape(F32, {Shape::kUnboundedSize, 3}, {true, false}),
+      "rhs");
+  Add(lhs, rhs, /*broadcast_dimensions=*/{});
+  auto statusor = BuildHloModule(&b);
+  ASSERT_FALSE(statusor.ok());
+  EXPECT_THAT(statusor.status().message(),
+              HasSubstr("Binary op add with incompatible shapes"));
+}
+
 }  // namespace
 }  // namespace xla
