@@ -1,5 +1,8 @@
 # PJRT C API changelog
 
+## 0.39 (Nov 10, 2023)
+* Added PJRT_Executable_GetCompiledMemoryStats.
+
 ## 0.38 (Oct 30, 2023)
 * Use `enum` to define STRUCT_SIZE constants in a header file.
 
