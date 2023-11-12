@@ -61,10 +61,37 @@ Status CommandBufferCmdSequence::Record(
   if (command_buffer->state() == se::CommandBuffer::State::kFinalized) {
     TF_RETURN_IF_ERROR(command_buffer->Update());
   }
+  // Returns if no cmd requires update.
+  if (!ShouldUpdateCmd(params)) {
+    return OkStatus();
+  }
   for (auto& cmd : commands_) {
     TF_RETURN_IF_ERROR(cmd->Record(params, command_buffer));
   }
   return command_buffer->Finalize();
+}
+
+bool CommandBufferCmdSequence::ShouldUpdateCmd(
+    const CommandBufferCmd::RecordParams& params) {
+  bool should_update = false;
+  const BufferAllocations* const allocs = params.buffer_allocations;
+  std::cerr << prev_allocs_.size() << ' ' << allocs->size() << '\n';
+  if (prev_allocs_.size() != allocs->size()) {
+    prev_allocs_.resize(allocs->size());
+    should_update = true;
+  }
+  std::cerr << prev_allocs_.size() << ' ' << allocs->size() << ' '
+            << commands_.size() << '\n';
+  for (auto& cmd : commands_) {
+    for (auto& slice : cmd->slices()) {
+      std::cerr << slice.index() << '\n';
+      se::DeviceMemoryBase new_alloc = allocs->GetDeviceAddress(slice);
+      se::DeviceMemoryBase& prev_alloc = prev_allocs_[slice.index()];
+      should_update |= !new_alloc.IsSameAs(prev_alloc);
+      prev_alloc = new_alloc;
+    }
+  }
+  return should_update;
 }
 
 //===----------------------------------------------------------------------===//
@@ -121,6 +148,10 @@ Status LaunchCmd::Record(const RecordParams& params,
       *kernel_args);
 }
 
+CommandBufferCmd::Slices LaunchCmd::slices() {
+  return CommandBufferCmd::Slices(args_.begin(), args_.end());
+}
+
 //===----------------------------------------------------------------------===//
 // MemcpyDeviceToDeviceCmd
 //===----------------------------------------------------------------------===//
@@ -137,6 +168,10 @@ Status MemcpyDeviceToDeviceCmd::Record(const RecordParams& params,
   se::DeviceMemoryBase dst = params.buffer_allocations->GetDeviceAddress(dst_);
   se::DeviceMemoryBase src = params.buffer_allocations->GetDeviceAddress(src_);
   return command_buffer->MemcpyDeviceToDevice(&dst, src, num_bytes_);
+}
+
+CommandBufferCmd::Slices MemcpyDeviceToDeviceCmd::slices() {
+  return {dst_, src_};
 }
 
 //===----------------------------------------------------------------------===//
@@ -167,19 +202,26 @@ Status GemmCmd::Record(const RecordParams& params,
           << ", output=" << output_buffer_
           << ", deterministic=" << deterministic_;
 
-  const BufferAllocations& allocs = *params.buffer_allocations;
   se::DeviceMemoryBase workspace(nullptr, 0);
 
+  se::DeviceMemoryBase lhs =
+      params.buffer_allocations->GetDeviceAddress(lhs_buffer_);
+  se::DeviceMemoryBase rhs =
+      params.buffer_allocations->GetDeviceAddress(rhs_buffer_);
+  se::DeviceMemoryBase out =
+      params.buffer_allocations->GetDeviceAddress(output_buffer_);
   TF_ASSIGN_OR_RETURN(
       auto nested_buffer,
       stream_executor::CommandBuffer::Trace(
           command_buffer->executor(), [&](stream_executor::Stream* stream) {
-            return RunGemm(config_, allocs.GetDeviceAddress(lhs_buffer_),
-                           allocs.GetDeviceAddress(rhs_buffer_),
-                           allocs.GetDeviceAddress(output_buffer_), workspace,
-                           deterministic_, stream);
+            return RunGemm(config_, lhs, rhs, out, workspace, deterministic_,
+                           stream);
           }));
   return command_buffer->AddNestedCommandBuffer(nested_buffer);
+}
+
+CommandBufferCmd::Slices GemmCmd::slices() {
+  return {lhs_buffer_, rhs_buffer_, output_buffer_};
 }
 
 }  // namespace xla::gpu
