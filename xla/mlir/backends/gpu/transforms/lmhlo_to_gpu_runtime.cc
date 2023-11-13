@@ -791,6 +791,18 @@ class CollectiveOpLowering : public OpRewritePattern<CollectiveOp> {
     return op.getIsSync();
   }
 
+  template <typename OpT>
+  static typename std::enable_if_t<is_any<OpT, SendOp, RecvOp>, bool>
+  noParallelGpuOp(OpT) {
+    return false;
+  }
+
+  template <typename OpT>
+  static typename std::enable_if_t<!is_any<OpT, SendOp, RecvOp>, bool>
+  noParallelGpuOp(OpT op) {
+    return op.getNoParallelGpuOp();
+  }
+
   // For async collective erase all corresponding done operations.
   template <typename StartOpT, typename DoneOpT>
   void eraseDoneOp(PatternRewriter& rewriter, CollectiveOp op) const {
@@ -912,6 +924,9 @@ class CollectiveOpLowering : public OpRewritePattern<CollectiveOp> {
 
     bool is_async = !getIsSync(op);
     call->setAttr(b.getStringAttr("is_async"), b.getBoolAttr(is_async));
+
+    call->setAttr(b.getStringAttr("no_parallel_gpu_op"),
+                  b.getBoolAttr(noParallelGpuOp(op)));
 
     // If the collective will not execute asynchronously, erase the associated
     // done op.
