@@ -78,6 +78,7 @@ using GpuDoubleComplexType = cuDoubleComplex;
 using GpuGraphHandle = CUgraph;
 using GpuGraphExecHandle = CUgraphExec;
 using GpuGraphNodeHandle = CUgraphNode;
+using GpuGraphConditionalHandle = CUgraphConditionalHandle;
 
 #endif
 
