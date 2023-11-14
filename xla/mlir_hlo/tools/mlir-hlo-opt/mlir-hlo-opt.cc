@@ -13,7 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "deallocation/IR/deallocation_ops.h"
 #include "deallocation/transforms/passes.h"
 #include "gml_st/IR/gml_st_ops.h"
 #include "gml_st/transforms/passes.h"
@@ -63,9 +62,8 @@ int main(int argc, char** argv) {
   registerAllExtensions(registry);
   mhlo::registerAllMhloDialects(registry);
   stablehlo::registerAllDialects(registry);
-  registry.insert<deallocation::DeallocationDialect, lmhlo::LmhloDialect,
-                  lmhlo_gpu::LmhloGpuDialect, gml_st::GmlStDialect,
-                  thlo::THLODialect>();
+  registry.insert<lmhlo::LmhloDialect, lmhlo_gpu::LmhloGpuDialect,
+                  gml_st::GmlStDialect, thlo::THLODialect>();
 
   registerTestHloTransformDialectEraseSchedulePass();
   registerTestHloTransformDialectInterpreterPass();
