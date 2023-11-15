@@ -1743,7 +1743,6 @@ StatusOr<std::unique_ptr<Executable>> GpuCompiler::RunBackend(
     // Dump computation proto state and buffer assignment for
     // CompiledMemoryAnalysis.
     auto hlo_proto = std::make_unique<HloProto>();
-    *hlo_proto->mutable_hlo_module() = gpu_executable->module().ToProto();
     *hlo_proto->mutable_buffer_assignment() = buffer_assignment->ToProto();
     gpu_executable->set_hlo_proto(std::move(hlo_proto));
     gpu_executable->set_debug_info(buffer_assignment->GetStats().ToString());
