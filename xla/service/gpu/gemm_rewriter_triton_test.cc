@@ -955,6 +955,52 @@ ENTRY e {
   EXPECT_FALSE(GemmRewriterTriton(cc).Run(module.get()).value());
 }
 
+TEST_F(GemmRewriterTritonTest, F32WithDefaultPrecisionIsSupported) {
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<VerifiedHloModule> module,
+                          ParseAndReturnVerifiedModule(R"(
+ENTRY e {
+  a = f32[2,2] parameter(0)
+  b = f32[2,2] parameter(1)
+  negate_b = f32[2,2] negate(b) // Make it a non-pure matmul
+  ROOT r = f32[2,2] dot(a, negate_b),
+    lhs_contracting_dims={1}, rhs_contracting_dims={0},
+    operand_precision={default, default}
+})"));
+  const se::CudaComputeCapability cc{se::CudaComputeCapability::AMPERE, 0};
+  EXPECT_TRUE(GemmRewriterTriton(cc).Run(module.get()).value());
+}
+
+TEST_F(GemmRewriterTritonTest, F32WithHighestPrecisionIsSupported) {
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<VerifiedHloModule> module,
+                          ParseAndReturnVerifiedModule(R"(
+ENTRY e {
+  a = f32[2,2] parameter(0)
+  b = f32[2,2] parameter(1)
+  negate_b = f32[2,2] negate(b) // Make it a non-pure matmul
+  ROOT r = f32[2,2] dot(a, negate_b),
+    lhs_contracting_dims={1}, rhs_contracting_dims={0},
+    operand_precision={highest, highest}
+})"));
+  const se::CudaComputeCapability cc{se::CudaComputeCapability::AMPERE, 0};
+  EXPECT_TRUE(GemmRewriterTriton(cc).Run(module.get()).value());
+}
+
+// A lot of other precision-type combinations are also not supported.
+TEST_F(GemmRewriterTritonTest, F16WithHighestPrecisionIsNotSupported) {
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<VerifiedHloModule> module,
+                          ParseAndReturnVerifiedModule(R"(
+ENTRY e {
+  a = f16[2,2] parameter(0)
+  b = f16[2,2] parameter(1)
+  negate_b = f16[2,2] negate(b) // Make it a non-pure matmul
+  ROOT r = f16[2,2] dot(a, negate_b),
+    lhs_contracting_dims={1}, rhs_contracting_dims={0},
+    operand_precision={highest, highest}
+})"));
+  const se::CudaComputeCapability cc{se::CudaComputeCapability::AMPERE, 0};
+  EXPECT_FALSE(GemmRewriterTriton(cc).Run(module.get()).value());
+}
+
 class GemmRewriterTritonLevel2Test : public GemmRewriterTritonTest {
  public:
   DebugOptions GetDebugOptionsForTest() override {
@@ -1122,6 +1168,34 @@ ENTRY e {
             HloInstruction::FusionKind::kCustom);
   EXPECT_LE(module->entry_computation()->root_instruction()->operand_count(),
             TritonFusionAnalysis::kMaxParameterPerScope * 2);
+}
+
+TEST_F(GemmRewriterTritonLevel2Test,
+       DoNotFuseTooManyParametersWhenAnInstructionWouldAddMultipleParameters) {
+  // If we fuse the select, it adds 2 additional parameters at once (not 3,
+  // because the select instruction itself is removed from the parameters).
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<VerifiedHloModule> module,
+                          ParseAndReturnVerifiedModule(R"(
+ENTRY e {
+  a = f32[3,49]{1,0} parameter(0)
+  b = f32[3,49]{1,0} parameter(1)
+  c = pred[3,49]{1,0} parameter(2)
+  d = f32[3,49]{1,0} parameter(3)
+  e = f32[3,49]{1,0} parameter(4)
+  add0 = f32[3,49]{1,0} add(a, b)
+  select = f32[3,49]{1,0} select(c, d, e)
+  add1 = f32[3,49]{1,0} add(add0, select)
+  f = f32[3,32]{1,0} parameter(5)
+  ROOT tmp_102 = f32[49,32]{1,0} dot(add1, f), lhs_contracting_dims={0}, rhs_contracting_dims={0}
+})"));
+
+  EXPECT_TRUE(GemmRewriterTriton(gpu_version_).Run(module.get()).value());
+  EXPECT_EQ(module->entry_computation()->root_instruction()->opcode(),
+            HloOpcode::kFusion);
+  EXPECT_EQ(module->entry_computation()->root_instruction()->fusion_kind(),
+            HloInstruction::FusionKind::kCustom);
+  EXPECT_LE(module->entry_computation()->root_instruction()->operand_count(),
+            TritonFusionAnalysis::kMaxParameterPerScope + 1);
 }
 
 TEST_F(GemmRewriterTritonLevel2Test,
