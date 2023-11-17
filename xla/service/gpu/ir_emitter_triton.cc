@@ -1394,11 +1394,18 @@ Status EmitMatMul(mlir::OpBuilder builder, absl::string_view libdevice_path,
           i < analysis.ScopeParameters(TritonFusionAnalysis::Scope::LHS).size();
       Side& side = is_lhs ? lhs : rhs;
       auto& values = is_lhs ? values_lhs : values_rhs;
-      CHECK(values
-                .insert({iter_args_to_parameters[i],
-                         EmitParameterLoad(b, iter_args[i],
-                                           iter_args_to_boundary_checks[i])})
-                .second);
+
+      const HloInstruction* param_hlo = iter_args_to_parameters[i];
+      Type param_ty = TritonType(b, param_hlo->shape().element_type());
+      Type param_storage_ty = StorageType(b, param_ty);
+      Value param_value =
+          EmitParameterLoad(b, iter_args[i], iter_args_to_boundary_checks[i]);
+      if (param_ty != param_storage_ty) {
+        // For example cast i8 to i1.
+        param_value = Cast(b, param_value, param_ty);
+      }
+
+      CHECK(values.insert({param_hlo, param_value}).second);
       SmallVector<Value> increments;
       for (const DimProperties& dim : side.tiled_dims) {
         const TensorIterationSpec::DimIterationSpec* spec = analysis.IterSpec(

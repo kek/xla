@@ -1237,6 +1237,12 @@ void FusionContext::TryToFuseWithInputsRecursively(
   while (to_visit.size() > num_requeued) {
     HloInstruction* hlo = to_visit.front();
     to_visit.pop();
+    // Don't visit again instructions which we already visited in other scopes.
+    // This avoids walking through a non-fused operation and creating a
+    // disconnected fusion graph.
+    if (old_to_new_mapping.contains(hlo)) {
+      continue;
+    }
     // Watch the total number of fusion parameters.
     if (inputs.size() + NumAddedParameters(*hlo) >
         TritonFusionAnalysis::kMaxParameterPerScope) {
