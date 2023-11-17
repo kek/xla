@@ -54,7 +54,6 @@ add_mlir_library(GmlStPasses
   tiling_softmax/tiling_softmax.cc
   vectorization/lower_vectors.cc
   vectorization/vectorization.cc
-  vectorization/vectorize_copy.cc
   vectorization/vectorize_for_cpu.cc
 
   DEPENDS

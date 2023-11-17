@@ -34,6 +34,7 @@ add_mlir_library(MLIRBufferTransforms
   propagate_static_shapes_to_kernel.cc
   test_hlo_transform_dialect_interpreter.cc
   tile_loops_pass.cc
+  vectorize_copy.cc
   unbufferize_pass.cc
   unroll_loops.cc
 

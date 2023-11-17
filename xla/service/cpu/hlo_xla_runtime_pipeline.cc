@@ -268,7 +268,7 @@ static Status CreateHloXlaPipeline(
   pm.addNestedPass<FuncOp>(mlir::gml_st::createInlineFusionClustersPass());
 
   if (options.enable_tiling_and_fusion) {
-    pm.addNestedPass<FuncOp>(mlir::gml_st::createVectorizeCopyPass());
+    pm.addNestedPass<FuncOp>(mlir::createVectorizeCopyPass());
     pm.addNestedPass<FuncOp>(mlir::gml_st::createNaiveCopyRemovalPass());
   }
   // Handle framework specific requirements for buffers and then insert

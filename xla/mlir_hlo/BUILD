@@ -1257,6 +1257,7 @@ cc_library(
         "transforms/tile_loops_pass.cc",
         "transforms/unbufferize_pass.cc",
         "transforms/unroll_loops.cc",
+        "transforms/vectorize_copy.cc",
     ],
     hdrs = [
         "transforms/passes.h",
@@ -1313,6 +1314,7 @@ cc_library(
         "@llvm-project//mlir:MemRefDialect",
         "@llvm-project//mlir:MemRefToLLVM",
         "@llvm-project//mlir:MemRefTransforms",
+        "@llvm-project//mlir:MemRefUtils",
         "@llvm-project//mlir:NVVMDialect",
         "@llvm-project//mlir:PDLDialect",
         "@llvm-project//mlir:Pass",
@@ -1536,7 +1538,6 @@ cc_library(
         "gml_st/transforms/transforms.h",
         "gml_st/transforms/vectorization/lower_vectors.cc",
         "gml_st/transforms/vectorization/vectorization.cc",
-        "gml_st/transforms/vectorization/vectorize_copy.cc",
         "gml_st/transforms/vectorization/vectorize_for_cpu.cc",
         "gml_st/utils/linalg_utils.cc",
         "gml_st/utils/tensor_utils.cc",
