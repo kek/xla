@@ -286,7 +286,8 @@ class GpuAotCompilationResult : public AotCompilationResult {
       auto* cst_proto = xla_runtime_gpu_executable_.add_constants();
       cst_proto->set_symbol_name(cst.symbol_name);
       cst_proto->set_allocation_index(cst.allocation_index);
-      cst_proto->set_content(cst.content.data(), cst.content.size());
+      cst_proto->set_content(cst.content.span().data(),
+                             cst.content.span().size());
     }
   }
 
@@ -332,7 +333,8 @@ StatusOr<std::unique_ptr<Executable>> GpuAotCompilationResult::LoadExecutable(
   for (auto& cst : xla_runtime_gpu_executable_.constants()) {
     GpuExecutable::ConstantInfo constant = {
         cst.symbol_name(),
-        {cst.content().begin(), cst.content().end()},
+        DenseDataIntermediate::Own(
+            std::vector<uint8_t>{cst.content().begin(), cst.content().end()}),
         cst.allocation_index()};
     constants.push_back(std::move(constant));
   }
@@ -1743,7 +1745,6 @@ StatusOr<std::unique_ptr<Executable>> GpuCompiler::RunBackend(
     // Dump computation proto state and buffer assignment for
     // CompiledMemoryAnalysis.
     auto hlo_proto = std::make_unique<HloProto>();
-    *hlo_proto->mutable_hlo_module() = gpu_executable->module().ToProto();
     *hlo_proto->mutable_buffer_assignment() = buffer_assignment->ToProto();
     gpu_executable->set_hlo_proto(std::move(hlo_proto));
     gpu_executable->set_debug_info(buffer_assignment->GetStats().ToString());

@@ -109,7 +109,7 @@ bool GpuExecutor::UnloadModule(ModuleHandle module_handle) {
 
 tsl::StatusOr<std::shared_ptr<DeviceMemoryBase>>
 GpuExecutor::CreateOrShareConstant(Stream* stream,
-                                   const std::vector<uint8_t>& content) {
+                                   absl::Span<const uint8_t> content) {
   return tsl::errors::Unimplemented("Not implemented for ROCm");
 }
 
